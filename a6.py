@@ -44,6 +44,7 @@ def prev_img():
 # 分栏放置按钮（左：上一张，右：下一张）
 c1, c2 = st.columns(2)
 with c1:
-    st.button('上一张', use_container_width=True, on_click=prev_img)
+    st.button('上一首', use_container_width=True, on_click=prev_img)
 with c2:
-    st.button('下一张', use_container_width=True, on_click=next_img)
+    st.button('下一首', use_container_width=True, on_click=next_img)
+
