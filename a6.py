@@ -8,17 +8,17 @@ image_ua = [
     {
         'audio_file':'https://music.163.com/song/media/outer/url?id=2137661995.mp3',
         'url': 'http://p1.music.126.net/XR65faE5ZmTmFvqy_ndtfQ==/109951169427192489.jpg?param=130y130',
-        'text': '赤'
+        'text': '赤伶--HITA'
     },
     {
         'audio_file':'https://music.163.com/song/media/outer/url?id=27591660.mp3',
         'url': 'http://p2.music.126.net/9KeyafHLjadqSQTRS_tN5Q==/5741649720318487.jpg?param=130y130',
-        'text': 'First Date'
+        'text': 'First Date--陈光荣'
     },
     {
         'audio_file':'https://music.163.com/song/media/outer/url?id=409654818.mp3',
         'url': 'http://p1.music.126.net/dq3YI-xJ03SyMJwIk0dvig==/17808789835268501.jpg?param=130y130',
-        'text': '灌篮高手《直到世界尽头》--姜创钢琴版(cover)'
+        'text': '灌篮高手《直到世界尽头》--姜创钢琴'
     },
 ]
 
@@ -47,4 +47,5 @@ with c1:
     st.button('上一首', use_container_width=True, on_click=prev_img)
 with c2:
     st.button('下一首', use_container_width=True, on_click=next_img)
+
 
