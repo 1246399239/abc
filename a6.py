@@ -49,3 +49,4 @@ with c2:
     st.button('下一首', use_container_width=True, on_click=next_img)
 
 
+
