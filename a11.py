@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import os
-import warnings  # 确保导入warnings
-warnings.filterwarnings('ignore')  # 修复乱码问题
+import warnings  # 必须确保这一行存在（导入warnings模块）
+warnings.filterwarnings('ignore')  # 这一行后面不要有任何乱码/多余字符
 
 
 # 页面配置
@@ -149,3 +149,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
