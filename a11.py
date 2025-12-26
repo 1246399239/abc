@@ -1,10 +1,8 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import numpy as np
 from datetime import datetime, timedelta
+import altair as alt
 
 # 页面配置
 st.set_page_config(
@@ -202,26 +200,27 @@ def create_charts(df):
     
     with col1:
         st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-        st.subheader("📈 按小时销售趋势的销售额")
+        st.subheader("📈 按日期销售趋势")
         
         # 按日期聚合销售额
         daily_sales = df.groupby('Date')['Revenue'].sum().reset_index()
         
-        fig_trend = px.line(
-            daily_sales, 
-            x='Date', 
-            y='Revenue',
-            title="",
-            color_discrete_sequence=['#4a9eff']
+        # 使用Altair创建线图
+        chart = alt.Chart(daily_sales).mark_line(
+            color='#4a9eff',
+            strokeWidth=3
+        ).add_selection(
+            alt.selection_interval()
+        ).encode(
+            x=alt.X('Date:T', title='日期'),
+            y=alt.Y('Revenue:Q', title='销售额'),
+            tooltip=['Date:T', 'Revenue:Q']
+        ).properties(
+            width=400,
+            height=300
         )
-        fig_trend.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='white',
-            xaxis=dict(gridcolor='#333333'),
-            yaxis=dict(gridcolor='#333333')
-        )
-        st.plotly_chart(fig_trend, use_container_width=True)
+        
+        st.altair_chart(chart, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
@@ -229,25 +228,22 @@ def create_charts(df):
         st.subheader("🏪 按产品类别的销售额")
         
         # 按类别聚合销售额
-        category_sales = df.groupby('Category')['Revenue'].sum().sort_values(ascending=True)
+        category_sales = df.groupby('Category')['Revenue'].sum().reset_index()
+        category_sales = category_sales.sort_values('Revenue', ascending=True)
         
-        fig_category = px.bar(
-            x=category_sales.values,
-            y=category_sales.index,
-            orientation='h',
-            title="",
-            color=category_sales.values,
-            color_continuous_scale='Blues'
+        # 使用Altair创建横向柱状图
+        chart = alt.Chart(category_sales).mark_bar(
+            color='#4a9eff'
+        ).encode(
+            x=alt.X('Revenue:Q', title='销售额'),
+            y=alt.Y('Category:N', title='产品类别', sort='-x'),
+            tooltip=['Category:N', 'Revenue:Q']
+        ).properties(
+            width=400,
+            height=300
         )
-        fig_category.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='white',
-            xaxis=dict(gridcolor='#333333'),
-            yaxis=dict(gridcolor='#333333'),
-            showlegend=False
-        )
-        st.plotly_chart(fig_category, use_container_width=True)
+        
+        st.altair_chart(chart, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
     
     # 第二行：地区分析和支付方式
@@ -258,20 +254,11 @@ def create_charts(df):
         st.subheader("🌍 按城市销售分布")
         
         if 'City' in df.columns:
-            city_sales = df.groupby('City')['Revenue'].sum().sort_values(ascending=False).head(10)
+            city_sales = df.groupby('City')['Revenue'].sum().reset_index()
+            city_sales = city_sales.sort_values('Revenue', ascending=False).head(10)
             
-            fig_city = px.pie(
-                values=city_sales.values,
-                names=city_sales.index,
-                title="",
-                color_discrete_sequence=px.colors.qualitative.Set3
-            )
-            fig_city.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='white'
-            )
-            st.plotly_chart(fig_city, use_container_width=True)
+            # 使用Streamlit内置的柱状图
+            st.bar_chart(city_sales.set_index('City')['Revenue'])
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col4:
@@ -279,24 +266,22 @@ def create_charts(df):
         st.subheader("💳 支付方式分析")
         
         if 'Payment_Method' in df.columns:
-            payment_dist = df['Payment_Method'].value_counts()
+            payment_dist = df['Payment_Method'].value_counts().reset_index()
+            payment_dist.columns = ['Payment_Method', 'Count']
             
-            fig_payment = px.bar(
-                x=payment_dist.index,
-                y=payment_dist.values,
-                title="",
-                color=payment_dist.values,
-                color_continuous_scale='Viridis'
+            # 使用Altair创建柱状图
+            chart = alt.Chart(payment_dist).mark_bar(
+                color='#4a9eff'
+            ).encode(
+                x=alt.X('Payment_Method:N', title='支付方式'),
+                y=alt.Y('Count:Q', title='订单数量'),
+                tooltip=['Payment_Method:N', 'Count:Q']
+            ).properties(
+                width=400,
+                height=300
             )
-            fig_payment.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='white',
-                xaxis=dict(gridcolor='#333333'),
-                yaxis=dict(gridcolor='#333333'),
-                showlegend=False
-            )
-            st.plotly_chart(fig_payment, use_container_width=True)
+            
+            st.altair_chart(chart, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
 def main():
