@@ -37,11 +37,10 @@ tzdata==2025.3
 urllib3==2.6.2
 watchdog==6.0.0
 openpyxl==3.1.5
-xlrd==1.2.0  # 新增：兼容旧Excel格式读取
-streamlit==1.52.2  # 核心框架
-pandas==2.3.3       # 数据处理
-numpy==2.3.5        # 数值计算
-openpyxl==3.1.5     # 读取Excel文件（你的数据格式）
-python-dateutil==2.9.0.post0  # 日期处理
-pytz==2025.2        # 时区支持
-tzdata==2025.3      # 时区数据
+streamlit==1.52.2
+pandas==2.3.3
+numpy==2.3.5
+openpyxl==3.1.5
+python-dateutil==2.9.0.post0
+pytz==2025.2
+tzdata==2025.3
