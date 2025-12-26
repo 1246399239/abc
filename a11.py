@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import altair as alt
 
 # 页面配置
 st.set_page_config(
@@ -92,9 +91,9 @@ def load_data():
             df['Revenue'] = df['total']
         
         return df
-    except FileNotFoundError:
-        # 如果文件不存在，生成示例数据
-        st.warning("未找到销售数据文件，使用示例数据")
+    except Exception as e:
+        # 如果文件不存在或读取失败，生成示例数据
+        st.warning(f"无法读取销售数据文件，使用示例数据。错误: {str(e)}")
         return generate_sample_data()
 
 def generate_sample_data():
@@ -203,24 +202,10 @@ def create_charts(df):
         st.subheader("📈 按日期销售趋势")
         
         # 按日期聚合销售额
-        daily_sales = df.groupby('Date')['Revenue'].sum().reset_index()
+        daily_sales = df.groupby('Date')['Revenue'].sum()
         
-        # 使用Altair创建线图
-        chart = alt.Chart(daily_sales).mark_line(
-            color='#4a9eff',
-            strokeWidth=3
-        ).add_selection(
-            alt.selection_interval()
-        ).encode(
-            x=alt.X('Date:T', title='日期'),
-            y=alt.Y('Revenue:Q', title='销售额'),
-            tooltip=['Date:T', 'Revenue:Q']
-        ).properties(
-            width=400,
-            height=300
-        )
-        
-        st.altair_chart(chart, use_container_width=True)
+        # 使用Streamlit内置的线图
+        st.line_chart(daily_sales)
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
@@ -228,22 +213,10 @@ def create_charts(df):
         st.subheader("🏪 按产品类别的销售额")
         
         # 按类别聚合销售额
-        category_sales = df.groupby('Category')['Revenue'].sum().reset_index()
-        category_sales = category_sales.sort_values('Revenue', ascending=True)
+        category_sales = df.groupby('Category')['Revenue'].sum()
         
-        # 使用Altair创建横向柱状图
-        chart = alt.Chart(category_sales).mark_bar(
-            color='#4a9eff'
-        ).encode(
-            x=alt.X('Revenue:Q', title='销售额'),
-            y=alt.Y('Category:N', title='产品类别', sort='-x'),
-            tooltip=['Category:N', 'Revenue:Q']
-        ).properties(
-            width=400,
-            height=300
-        )
-        
-        st.altair_chart(chart, use_container_width=True)
+        # 使用Streamlit内置的柱状图
+        st.bar_chart(category_sales)
         st.markdown('</div>', unsafe_allow_html=True)
     
     # 第二行：地区分析和支付方式
@@ -254,11 +227,10 @@ def create_charts(df):
         st.subheader("🌍 按城市销售分布")
         
         if 'City' in df.columns:
-            city_sales = df.groupby('City')['Revenue'].sum().reset_index()
-            city_sales = city_sales.sort_values('Revenue', ascending=False).head(10)
+            city_sales = df.groupby('City')['Revenue'].sum().sort_values(ascending=False).head(10)
             
             # 使用Streamlit内置的柱状图
-            st.bar_chart(city_sales.set_index('City')['Revenue'])
+            st.bar_chart(city_sales)
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col4:
@@ -266,22 +238,10 @@ def create_charts(df):
         st.subheader("💳 支付方式分析")
         
         if 'Payment_Method' in df.columns:
-            payment_dist = df['Payment_Method'].value_counts().reset_index()
-            payment_dist.columns = ['Payment_Method', 'Count']
+            payment_dist = df['Payment_Method'].value_counts()
             
-            # 使用Altair创建柱状图
-            chart = alt.Chart(payment_dist).mark_bar(
-                color='#4a9eff'
-            ).encode(
-                x=alt.X('Payment_Method:N', title='支付方式'),
-                y=alt.Y('Count:Q', title='订单数量'),
-                tooltip=['Payment_Method:N', 'Count:Q']
-            ).properties(
-                width=400,
-                height=300
-            )
-            
-            st.altair_chart(chart, use_container_width=True)
+            # 使用Streamlit内置的柱状图
+            st.bar_chart(payment_dist)
         st.markdown('</div>', unsafe_allow_html=True)
 
 def main():
@@ -297,19 +257,23 @@ def main():
     
     # 日期范围筛选
     if 'Date' in df.columns:
-        date_range = st.sidebar.date_input(
-            "选择日期范围",
-            value=(df['Date'].min(), df['Date'].max()),
-            min_value=df['Date'].min(),
-            max_value=df['Date'].max()
-        )
-        
-        # 确保date_range是元组
-        if isinstance(date_range, tuple) and len(date_range) == 2:
-            start_date, end_date = date_range
-            df_filtered = df[(df['Date'] >= pd.Timestamp(start_date)) & 
-                           (df['Date'] <= pd.Timestamp(end_date))]
-        else:
+        try:
+            date_range = st.sidebar.date_input(
+                "选择日期范围",
+                value=(df['Date'].min().date(), df['Date'].max().date()),
+                min_value=df['Date'].min().date(),
+                max_value=df['Date'].max().date()
+            )
+            
+            # 确保date_range是元组
+            if isinstance(date_range, tuple) and len(date_range) == 2:
+                start_date, end_date = date_range
+                df_filtered = df[(df['Date'].dt.date >= start_date) & 
+                               (df['Date'].dt.date <= end_date)]
+            else:
+                df_filtered = df
+        except Exception as e:
+            st.sidebar.error(f"日期筛选错误: {str(e)}")
             df_filtered = df
     else:
         df_filtered = df
@@ -337,7 +301,8 @@ def main():
     st.sidebar.markdown("### 📋 数据概览")
     st.sidebar.write(f"总记录数: {len(df):,}")
     st.sidebar.write(f"筛选后记录数: {len(df_filtered):,}")
-    st.sidebar.write(f"数据时间范围: {df['Date'].min().strftime('%Y-%m-%d')} 至 {df['Date'].max().strftime('%Y-%m-%d')}")
+    if 'Date' in df.columns:
+        st.sidebar.write(f"数据时间范围: {df['Date'].min().strftime('%Y-%m-%d')} 至 {df['Date'].max().strftime('%Y-%m-%d')}")
     
     # 创建KPI指标
     create_kpi_metrics(df, df_filtered)
