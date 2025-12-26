@@ -30,42 +30,39 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 缓存数据加载（优先读取supermarket_sales.xlsx）
+# 缓存数据加载
 @st.cache_data(show_spinner="正在加载数据...")
 def load_data(uploaded_file=None):
-    """加载销售数据：优先上传文件 → 目标文件 → 示例数据"""
     current_dir = os.getcwd()
     st.sidebar.info(f"当前工作目录：{current_dir}")
-    
-    # 目标文件名（用户已修改为该名称）
     target_filename = "supermarket_sales.xlsx"
     file_path = os.path.join(current_dir, target_filename)
     
     try:
-        # 1. 优先上传文件
+        # 优先上传文件
         if uploaded_file is not None:
             df = read_excel_with_fallback(uploaded_file)
             st.success("✅ 成功加载上传的Excel文件")
-            return df
-        
-        # 2. 读取目标文件（用户改名后的文件名）
-        if os.path.exists(file_path):
+        # 读取目标文件
+        elif os.path.exists(file_path):
             df = read_excel_with_fallback(file_path)
             st.success(f"✅ 成功加载数据文件：{target_filename}")
-            return df
+        else:
+            st.warning(f"⚠️ 未找到 {target_filename}，使用示例数据")
+            return generate_sample_data()
         
-        # 3. 未找到文件提示
-        st.warning(f"⚠️ 未在当前目录找到 {target_filename}！")
-        st.warning(f"当前目录文件列表：{os.listdir(current_dir)}")
-        st.info("💡 请确保文件与代码在同一文件夹，或通过左侧上传文件")
-        return generate_sample_data()
+        # 显示你的Excel原始列名（方便你确认字段）
+        st.info(f"你的Excel原始字段名：{list(df.columns)}")
+        # 标准化字段（兼容中英文）
+        df_standard = standardize_fields(df)
+        return df_standard
     
     except Exception as e:
         st.error(f"❌ 数据加载失败：{str(e)}")
         return generate_sample_data()
 
 def read_excel_with_fallback(file_path_or_upload):
-    """双引擎读取Excel，兼容.xlsx/.xls"""
+    """双引擎读取Excel"""
     try:
         return pd.read_excel(file_path_or_upload, engine="openpyxl")
     except:
@@ -75,42 +72,60 @@ def read_excel_with_fallback(file_path_or_upload):
             raise Exception(f"Excel读取失败：{str(e)}")
 
 def standardize_fields(df):
-    """标准化字段（适配原始数据的字段名）"""
-    df.columns = [col.strip().replace("（", "").replace("）", "").lower() for col in df.columns]
-    
-    # 日期字段（原始字段：日期）
-    if "日期" in df.columns:
-        df["date"] = pd.to_datetime(df["日期"], errors="coerce")
-        df = df.dropna(subset=["date"])
-    else:
-        st.warning("⚠️ 数据中未找到日期字段，无法进行日期筛选")
-    
-    # 销售额字段（原始字段：总价）
-    if "总价" in df.columns:
-        df["revenue"] = pd.to_numeric(df["总价"], errors="coerce").fillna(0)
-    elif "单价" in df.columns and "数量" in df.columns:
-        df["revenue"] = df["单价"] * df["数量"]
-        st.info("💡 已通过「单价×数量」计算销售额")
-    else:
-        df["revenue"] = 0
-    
-    # 产品类别（原始字段：产品类型）
-    df["category"] = df.get("产品类型", "未知")
-    # 城市（原始字段：城市）
-    df["city"] = df.get("城市", "未知")
-    # 客户类型（原始字段：顾客类型）
-    df["customer_type"] = df.get("顾客类型", "未知")
-    # 评分（原始字段：评分）
-    df["rating"] = pd.to_numeric(df.get("评分", 0), errors="coerce").fillna(0)
-    # 补充其他字段
-    df["payment_method"] = df.get("payment_method", "未知")
-    df["unit_price"] = pd.to_numeric(df.get("单价", 0), errors="coerce").fillna(0)
-    df["quantity"] = pd.to_numeric(df.get("数量", 0), errors="coerce").fillna(0)
-    
-    return df
+    """兼容中英文字段名的标准化（核心修复）"""
+    # 先统一字段名小写，方便匹配
+    df.columns = [col.strip().lower() for col in df.columns]
+    standardized = pd.DataFrame()
 
+    # 1. 日期字段（匹配：日期 / date）
+    date_cols = [col for col in df.columns if col in ["日期", "date"]]
+    if date_cols:
+        standardized["date"] = pd.to_datetime(df[date_cols[0]], errors="coerce")
+        standardized = standardized.dropna(subset=["date"])
+    else:
+        st.warning("⚠️ 未找到日期字段（需要：日期 / Date），无法日期筛选")
+        standardized["date"] = pd.NaT
+
+    # 2. 销售额字段（匹配：总价 / total）
+    revenue_cols = [col for col in df.columns if col in ["总价", "total"]]
+    if revenue_cols:
+        standardized["revenue"] = pd.to_numeric(df[revenue_cols[0]], errors="coerce").fillna(0)
+    # 备选：单价×数量（匹配：单价/unit_price + 数量/quantity）
+    elif "unit_price" in df.columns and "quantity" in df.columns:
+        standardized["revenue"] = df["unit_price"] * df["quantity"]
+        st.info("💡 通过「单价×数量」计算了销售额")
+    else:
+        st.warning("⚠️ 未找到销售额字段（需要：总价 / Total / 单价+数量），默认销售额0")
+        standardized["revenue"] = 0
+
+    # 3. 产品类别（匹配：产品类型 / product line）
+    category_cols = [col for col in df.columns if col in ["产品类型", "product line"]]
+    standardized["category"] = df[category_cols[0]] if category_cols else "未知"
+
+    # 4. 城市（匹配：城市 / city）
+    city_cols = [col for col in df.columns if col in ["城市", "city"]]
+    standardized["city"] = df[city_cols[0]] if city_cols else "未知"
+
+    # 5. 客户类型（匹配：顾客类型 / customer type）
+    customer_cols = [col for col in df.columns if col in ["顾客类型", "customer type"]]
+    standardized["customer_type"] = df[customer_cols[0]] if customer_cols else "未知"
+
+    # 6. 支付方式（匹配：支付方式 / payment）
+    payment_cols = [col for col in df.columns if col in ["支付方式", "payment"]]
+    standardized["payment_method"] = df[payment_cols[0]] if payment_cols else "未知"
+
+    # 7. 评分（匹配：评分 / rating）
+    rating_cols = [col for col in df.columns if col in ["评分", "rating"]]
+    standardized["rating"] = pd.to_numeric(df[rating_cols[0]], errors="coerce").fillna(0) if rating_cols else 0
+
+    # 8. 单价 & 数量（匹配：单价/unit_price、数量/quantity）
+    standardized["unit_price"] = pd.to_numeric(df.get("单价", df.get("unit_price", 0)), errors="coerce").fillna(0)
+    standardized["quantity"] = pd.to_numeric(df.get("数量", df.get("quantity", 0)), errors="coerce").fillna(0)
+
+    return standardized
+
+# 以下generate_sample_data、create_kpi_metrics等函数保持不变（沿用之前版本）
 def generate_sample_data():
-    """生成示例数据"""
     np.random.seed(42)
     start_date = datetime(2024, 1, 1)
     end_date = datetime(2024, 3, 31)
@@ -142,7 +157,6 @@ def generate_sample_data():
     return df
 
 def create_kpi_metrics(filtered_df):
-    """创建KPI指标"""
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -157,19 +171,16 @@ def create_kpi_metrics(filtered_df):
         st.markdown(f'<div class="metric-card"><div class="metric-title">订单总数</div><div class="metric-value">{len(filtered_df):,}</div></div>', unsafe_allow_html=True)
 
 def create_charts(filtered_df):
-    """创建数据图表"""
     col1, col2 = st.columns(2)
     
-    # 销售趋势
     with col1:
         st.markdown('<div class="chart-container">', unsafe_allow_html=True)
         st.subheader("📈 销售趋势（按日期）")
-        if "date" in filtered_df.columns:
+        if not filtered_df["date"].isna().all():
             daily_sales = filtered_df.groupby("date")["revenue"].sum()
             st.line_chart(daily_sales, color="#4a9eff", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
     
-    # 产品类别销售
     with col2:
         st.markdown('<div class="chart-container">', unsafe_allow_html=True)
         st.subheader("🏪 产品类别销售额")
@@ -179,7 +190,6 @@ def create_charts(filtered_df):
     
     col3, col4 = st.columns(2)
     
-    # 城市销售分布
     with col3:
         st.markdown('<div class="chart-container">', unsafe_allow_html=True)
         st.subheader("🌍 城市销售分布")
@@ -187,7 +197,6 @@ def create_charts(filtered_df):
         st.bar_chart(city_sales, color="#4a9eff", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
     
-    # 客户类型分析
     with col4:
         st.markdown('<div class="chart-container">', unsafe_allow_html=True)
         st.subheader("👥 客户类型分布")
@@ -196,7 +205,6 @@ def create_charts(filtered_df):
         st.markdown('</div>', unsafe_allow_html=True)
 
 def main():
-    """主函数"""
     st.markdown('<h1 class="main-title">📊 销售数据仪表板</h1>', unsafe_allow_html=True)
     
     # 文件上传
@@ -211,8 +219,8 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.header("🔍 数据筛选")
     
-    # 日期筛选
-    if "date" in df.columns:
+    # 日期筛选（有日期时才显示）
+    if not df["date"].isna().all():
         min_date = df["date"].min().date()
         max_date = df["date"].max().date()
         date_range = st.sidebar.date_input("选择日期范围", value=(min_date, max_date), min_value=min_date, max_value=max_date)
