@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import warnings
+warnings.filterwarnings('ignore')
 
 # 页面配置
 st.set_page_config(
@@ -52,7 +54,7 @@ st.markdown("""
     }
     
     /* 侧边栏样式 */
-    .sidebar .sidebar-content {
+    [data-testid="stSidebar"] {
         background-color: #262730;
     }
     
@@ -68,6 +70,13 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
+    
+    /* 调整图表颜色 */
+    [data-testid="stLineChart"], [data-testid="stBarChart"] {
+        background-color: #262730;
+        border-radius: 8px;
+        padding: 10px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -97,12 +106,12 @@ def load_data():
         return generate_sample_data()
 
 def generate_sample_data():
-    """生成示例销售数据"""
+    """生成示例销售数据（优化版本，减少数据量）"""
     np.random.seed(42)
     
-    # 生成日期范围
+    # 生成日期范围（缩短为3个月，避免内存溢出）
     start_date = datetime(2024, 1, 1)
-    end_date = datetime(2024, 12, 31)
+    end_date = datetime(2024, 3, 31)
     date_range = pd.date_range(start=start_date, end=end_date, freq='D')
     
     # 产品类别
@@ -111,8 +120,8 @@ def generate_sample_data():
     
     data = []
     for date in date_range:
-        # 每天生成多条销售记录
-        daily_records = np.random.randint(50, 200)
+        # 每天生成较少的销售记录，避免内存问题
+        daily_records = np.random.randint(20, 50)
         for _ in range(daily_records):
             category = np.random.choice(categories)
             city = np.random.choice(cities)
@@ -149,10 +158,11 @@ def generate_sample_data():
                 'Payment_Method': np.random.choice(['现金', '信用卡', '移动支付'])
             })
     
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    return df
 
 def create_kpi_metrics(df, filtered_df):
-    """创建KPI指标"""
+    """创建KPI指标（修复计算逻辑）"""
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -174,11 +184,12 @@ def create_kpi_metrics(df, filtered_df):
         """, unsafe_allow_html=True)
     
     with col3:
-        daily_avg = filtered_df.groupby('Date')['Revenue'].sum().mean()
+        # 修复：每单平均销售额 = 总销售额 / 订单数
+        avg_order_value = filtered_df['Revenue'].sum() / len(filtered_df) if len(filtered_df) > 0 else 0
         st.markdown(f"""
         <div class="metric-card">
             <div class="metric-title">每单的平均销售额</div>
-            <div class="metric-value">¥ {daily_avg:.0f}</div>
+            <div class="metric-value">¥ {avg_order_value:.0f}</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -192,7 +203,7 @@ def create_kpi_metrics(df, filtered_df):
         """, unsafe_allow_html=True)
 
 def create_charts(df):
-    """创建图表"""
+    """创建图表（优化显示）"""
     
     # 第一行：时间趋势和类别分析
     col1, col2 = st.columns(2)
@@ -205,7 +216,7 @@ def create_charts(df):
         daily_sales = df.groupby('Date')['Revenue'].sum()
         
         # 使用Streamlit内置的线图
-        st.line_chart(daily_sales)
+        st.line_chart(daily_sales, color="#4a9eff")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
@@ -216,7 +227,7 @@ def create_charts(df):
         category_sales = df.groupby('Category')['Revenue'].sum()
         
         # 使用Streamlit内置的柱状图
-        st.bar_chart(category_sales)
+        st.bar_chart(category_sales, color="#4a9eff")
         st.markdown('</div>', unsafe_allow_html=True)
     
     # 第二行：地区分析和支付方式
@@ -226,22 +237,18 @@ def create_charts(df):
         st.markdown('<div class="chart-container">', unsafe_allow_html=True)
         st.subheader("🌍 按城市销售分布")
         
-        if 'City' in df.columns:
+        if 'City' in df.columns and len(df) > 0:
             city_sales = df.groupby('City')['Revenue'].sum().sort_values(ascending=False).head(10)
-            
-            # 使用Streamlit内置的柱状图
-            st.bar_chart(city_sales)
+            st.bar_chart(city_sales, color="#4a9eff")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col4:
         st.markdown('<div class="chart-container">', unsafe_allow_html=True)
         st.subheader("💳 支付方式分析")
         
-        if 'Payment_Method' in df.columns:
+        if 'Payment_Method' in df.columns and len(df) > 0:
             payment_dist = df['Payment_Method'].value_counts()
-            
-            # 使用Streamlit内置的柱状图
-            st.bar_chart(payment_dist)
+            st.bar_chart(payment_dist, color="#4a9eff")
         st.markdown('</div>', unsafe_allow_html=True)
 
 def main():
@@ -255,31 +262,35 @@ def main():
     # 侧边栏筛选器
     st.sidebar.header("🔍 数据筛选")
     
-    # 日期范围筛选
-    if 'Date' in df.columns:
+    # 日期范围筛选（修复核心问题）
+    df_filtered = df.copy()
+    if 'Date' in df.columns and len(df) > 0:
         try:
+            # 获取最小和最大日期
+            min_date = df['Date'].min().date()
+            max_date = df['Date'].max().date()
+            
+            # 日期输入控件
             date_range = st.sidebar.date_input(
                 "选择日期范围",
-                value=(df['Date'].min().date(), df['Date'].max().date()),
-                min_value=df['Date'].min().date(),
-                max_value=df['Date'].max().date()
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date
             )
             
-            # 确保date_range是元组
+            # 处理日期筛选
             if isinstance(date_range, tuple) and len(date_range) == 2:
                 start_date, end_date = date_range
-                df_filtered = df[(df['Date'].dt.date >= start_date) & 
-                               (df['Date'].dt.date <= end_date)]
-            else:
-                df_filtered = df
+                # 正确的日期筛选方式
+                df_filtered = df[
+                    (df['Date'] >= pd.to_datetime(start_date)) & 
+                    (df['Date'] <= pd.to_datetime(end_date))
+                ]
         except Exception as e:
             st.sidebar.error(f"日期筛选错误: {str(e)}")
-            df_filtered = df
-    else:
-        df_filtered = df
     
     # 类别筛选
-    if 'Category' in df.columns:
+    if 'Category' in df.columns and len(df) > 0:
         categories = st.sidebar.multiselect(
             "选择产品类别",
             options=df['Category'].unique(),
@@ -288,7 +299,7 @@ def main():
         df_filtered = df_filtered[df_filtered['Category'].isin(categories)]
     
     # 城市筛选
-    if 'City' in df.columns:
+    if 'City' in df.columns and len(df) > 0:
         cities = st.sidebar.multiselect(
             "选择城市",
             options=df['City'].unique(),
@@ -296,13 +307,27 @@ def main():
         )
         df_filtered = df_filtered[df_filtered['City'].isin(cities)]
     
+    # 客户类型筛选（新增）
+    if 'Customer_Type' in df.columns and len(df) > 0:
+        customer_types = st.sidebar.multiselect(
+            "选择客户类型",
+            options=df['Customer_Type'].unique(),
+            default=df['Customer_Type'].unique()
+        )
+        df_filtered = df_filtered[df_filtered['Customer_Type'].isin(customer_types)]
+    
     # 显示数据概览
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 📋 数据概览")
     st.sidebar.write(f"总记录数: {len(df):,}")
     st.sidebar.write(f"筛选后记录数: {len(df_filtered):,}")
-    if 'Date' in df.columns:
+    if 'Date' in df.columns and len(df) > 0:
         st.sidebar.write(f"数据时间范围: {df['Date'].min().strftime('%Y-%m-%d')} 至 {df['Date'].max().strftime('%Y-%m-%d')}")
+    
+    # 空数据处理
+    if len(df_filtered) == 0:
+        st.warning("⚠️ 筛选条件下没有找到数据，请调整筛选条件！")
+        return
     
     # 创建KPI指标
     create_kpi_metrics(df, df_filtered)
@@ -317,11 +342,12 @@ def main():
     # 显示筛选后的数据
     st.dataframe(
         df_filtered.head(1000),  # 限制显示1000行以提高性能
-        use_container_width=True
+        use_container_width=True,
+        hide_index=True
     )
     
     # 下载按钮
-    csv = df_filtered.to_csv(index=False)
+    csv = df_filtered.to_csv(index=False, encoding='utf-8-sig')
     st.download_button(
         label="📥 下载筛选数据 (CSV)",
         data=csv,
